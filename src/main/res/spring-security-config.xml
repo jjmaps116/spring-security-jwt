@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans:beans xmlns:beans="http://www.springframework.org/schema/beans"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns="http://www.springframework.org/schema/security"
+             xmlns:context="http://www.springframework.org/schema/context"
+             xmlns:http="http://www.springframework.org/schema/mvc"
+             xsi:schemaLocation="http://www.springframework.org/schema/beans
+			 http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
+			 http://www.springframework.org/schema/security
+			 http://www.springframework.org/schema/security/spring-security-4.2.xsd http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc.xsd">
+    <!--单独的组件扫描，避免spring主配置文件未定义扫描路径的情况-->
+    <context:component-scan base-package="top.jjmaps.**"/>
+    <!--不需要拦截的url    加入如下配置即可跳过权限检验-->
+    <!--<http pattern="/aliOfflineDetailInfo/save" security="none"/>-->
+
+
+    <!--所有图片资源-->
+    <http pattern="/index.html" security="none"/>
+    <http pattern="/**/*.html" security="none"/>
+    <http pattern="/**.html" security="none"/>
+    <http pattern="/static/**" security="none"/>
+    <http pattern="/**/*.jpg" security="none"/>
+    <http pattern="/**/*.png" security="none"/>
+    <http pattern="/**/*.gif" security="none"/>
+
+
+    <!--拦截配置-->
+    <http auto-config="false" use-expressions="true" create-session="stateless"
+          entry-point-ref="myAuthenticationEntryPoint" once-per-request="true">
+        <!--登录配置-->
+        <form-login
+                login-processing-url="/security/login"
+                authentication-success-handler-ref="myAuthenticationSuccessHandler"
+                authentication-failure-handler-ref="myAuthenticationFailureHandler"
+        />
+        <!--注销配置-->
+        <logout logout-url="/logout" success-handler-ref="myLogoutSuccessHandler"/>
+        <!--处理无权登录的情况-->
+        <access-denied-handler ref="myAccessDeniedHandler"/>
+        <!--禁用csrf-->
+        <csrf disabled="true"/>
+        <!--在iframe中显示-->
+        <!--<headers><frame-options policy="SAMEORIGIN"/></headers>-->
+        <!--关闭匿名认证-->
+        <anonymous enabled="false"/>
+
+        <!--拦截路径-->
+        <intercept-url pattern="/**" access="authenticated"/>
+        <!--自定义拦截器-->
+        <custom-filter ref="jwtAuthenticationTokenFilter" before="FORM_LOGIN_FILTER"/>
+        <custom-filter ref="myFilter" before="FILTER_SECURITY_INTERCEPTOR"/>
+    </http>
+    <!--加密方式-->
+    <beans:bean id="passwordEncoder" class="top.jjmaps.utils.PasswordEncoderImpl"/>
+    <!-- 访问决策器，决定某个用户具有的角色，是否有足够的权限去访问某个资源 -->
+    <beans:bean id="myAccessDecisionManagerBean" class="top.jjmaps.service.filter.MyAccessDecisionManager"/>
+    <!-- 资源源数据定义，即定义某一资源可以被哪些角色访问 -->
+    <beans:bean id="securityMetadataSource" class="top.jjmaps.service.filter.MyFilterSecurityMetadataSource"/>
+    <!--自定义拦截器-->
+    <beans:bean id="myFilter" class="top.jjmaps.service.filter.MyFilterSecurityInterceptor">
+        <beans:property name="accessDecisionManager" ref="myAccessDecisionManagerBean"/>
+        <beans:property name="securityMetadataSource" ref="securityMetadataSource"/>
+        <beans:property name="authenticationManager" ref="authenticationManager"/>
+    </beans:bean>
+
+    <!--jwtUtil-->
+    <beans:bean id="jwtUtil" class="top.jjmaps.utils.JwtUtil"/>
+    <!--Jwt 拦截器-->
+    <beans:bean id="jwtAuthenticationTokenFilter"
+                class="top.jjmaps.service.filter.JwtAuthenticationTokenFilter"/>
+    <!--登陆成功处理器-->
+    <beans:bean id="myAuthenticationSuccessHandler"
+                class="top.jjmaps.service.filter.MyAuthenticationSuccessHandler"/>
+    <!--登陆失败处理器-->
+    <beans:bean id="myAuthenticationFailureHandler"
+                class="top.jjmaps.service.filter.MyAuthenticationFailureHandler"/>
+    <!--登出成功处理器-->
+    <beans:bean id="myLogoutSuccessHandler" class="top.jjmaps.service.filter.MyLogoutSuccessHandler"/>
+    <!--处理无权登录的情况-->
+    <beans:bean id="myAccessDeniedHandler" class="top.jjmaps.service.filter.MyAccessDeniedHandler"/>
+    <!--处理用户未登录(无权限)-->
+    <beans:bean id="myAuthenticationEntryPoint" class="top.jjmaps.service.filter.MyAuthenticationEntryPoint"/>
+
+    <!--自定义信息验证-->
+    <!--<beans:bean id="myUsernamePasswordAuthenticationFilter" class="com.longxis.security.service.filter.MyUsernamePasswordAuthenticationFilter">
+        <beans:property name="authenticationManager" ref="authenticationManager"/>
+    </beans:bean>-->
+    <!--为了能捕获UserNotFoundException异常,设置隐藏此异常为false-->
+    <beans:bean id="daoAuthenticationProvider"
+                class="org.springframework.security.authentication.dao.DaoAuthenticationProvider">
+        <beans:property name="userDetailsService" ref="UserService"/>
+        <beans:property name="hideUserNotFoundExceptions" value="false"/>
+        <beans:property name="passwordEncoder" ref="passwordEncoder"/>
+    </beans:bean>
+    <!--权限管理器，由于修改了daoAuthenticationProvider的默认设置，所以需要手动引用-->
+    <authentication-manager alias="authenticationManager">
+        <authentication-provider ref="daoAuthenticationProvider"/>
+    </authentication-manager>
+</beans:beans>

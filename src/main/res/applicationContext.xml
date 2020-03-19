@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context" xmlns:p="http://www.springframework.org/schema/p"
+       xmlns:aop="http://www.springframework.org/schema/aop" xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:task="http://www.springframework.org/schema/task"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.springframework.org/schema/context
+        http://www.springframework.org/schema/context/spring-context.xsd
+     http://www.springframework.org/schema/aop
+     http://www.springframework.org/schema/aop/spring-aop.xsd
+     http://www.springframework.org/schema/tx
+     http://www.springframework.org/schema/tx/spring-tx.xsd
+     http://www.springframework.org/schema/task
+     http://www.springframework.org/schema/task/spring-task.xsd">
+    <!--扫描指定包下的类,实例化组件-->
+    <context:component-scan
+            base-package="com.longxis.**.dao,com.longxis.**.service,com.longxis.**.controller,com.longxis.**.component"/>
+    <!--启用注解@Service@Repository-->
+    <context:annotation-config/>
+
+    <!-- 多个properties所需要配置的 -->
+    <bean id="PropertyPlaceholderConfigurer"
+          class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+        <property name="order" value="1"/>
+        <property name="ignoreUnresolvablePlaceholders" value="true"/>
+        <property name="locations">
+            <list>
+                <!--读取src目录的jdbc.properties文件-->
+                <value>classpath:jdbc.properties</value>
+                <!--读取src目录的properties.properties文件-->
+                <value>classpath:payInfo.properties</value>
+                <value>classpath:push.properties</value>
+                <value>classpath:tb_register_info.properties</value>
+            </list>
+        </property>
+    </bean>
+
+    <import resource="classpath:spring-security-config.xml"/>
+    <!--支付相关bean-->
+    <import resource="classpath:payContext.xml"/>
+    <!--淘宝相关bean-->
+    <import resource="classpath:tbContext.xml"/>
+
+    <!-- 开启这个配置，spring才能识别@Scheduled注解   -->
+    <task:annotation-driven scheduler="qbScheduler" mode="proxy"/>
+    <task:scheduler id="qbScheduler" pool-size="10"/>
+
+
+    <!--读取类路径下的jdbc.properties文件-->
+    <!--<context:property-placeholder location="classpath:jdbc.properties"/>-->
+    <!-- 配置数据源 -->
+    <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource" init-method="init" destroy-method="close">
+        <property name="driverClassName" value="${jdbc.driverClassName}"/>
+        <property name="url" value="${jdbc.url}"/>
+        <property name="username" value="${jdbc.username}"/>
+        <property name="password" value="${jdbc.password}"/>
+        <!-- 配置初始化大小、最小、最大 -->
+        <property name="initialSize" value="10"/>
+        <property name="minIdle" value="10"/>
+        <property name="maxActive" value="1000"/>
+        <!-- 配置获取连接等待超时的时间 -->
+        <property name="maxWait" value="10000"/>
+        <!-- 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位是毫秒 -->
+        <property name="timeBetweenEvictionRunsMillis" value="60000"/>
+        <!-- 配置一个连接在池中最小生存的时间，单位是毫秒 -->
+        <property name="minEvictableIdleTimeMillis" value="300000"/>
+        <property name="testWhileIdle" value="true"/>
+        <!-- 这里建议配置为TRUE，防止取到的连接不可用 -->
+        <property name="testOnBorrow" value="true"/>
+        <property name="testOnReturn" value="false"/>
+        <!-- 打开PSCache，并且指定每个连接上PSCache的大小 -->
+        <property name="poolPreparedStatements" value="true"/>
+        <property name="maxPoolPreparedStatementPerConnectionSize" value="20"/>
+        <!-- 这里配置提交方式，默认就是TRUE，可以不用配置 -->
+        <property name="defaultAutoCommit" value="true"/>
+        <!-- 验证连接有效与否的SQL，不同的数据配置不同 -->
+        <property name="validationQuery" value="select 1 "/>
+        <property name="filters" value="stat"/>
+        <!--日志-->
+        <property name="proxyFilters">
+            <list>
+                <ref bean="log-filter"/>
+            </list>
+        </property>
+    </bean>
+    <!--spring-jdbc-->
+    <bean id="namedParameterJdbcTemplate" class="org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate">
+        <constructor-arg ref="dataSource"/>
+    </bean>
+    <!-- 配置事务管理器 -->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager"
+          p:dataSource-ref="dataSource"/>
+    <!-- 通过AOP配置提供事务增强，让service包下所有Bean的所有方法拥有事务 -->
+    <aop:config proxy-target-class="true">
+        <aop:pointcut id="serviceMethod" expression=" execution(* com.longxis..service..*(..))"/>
+        <aop:advisor pointcut-ref="serviceMethod" advice-ref="txAdvice"/>
+    </aop:config>
+    <tx:advice id="txAdvice" transaction-manager="transactionManager">
+        <tx:attributes>
+            <!-- 方法名是get、load、find、count等开头的查询方法不适用事务 -->
+            <tx:method name="get*" read-only="true" propagation="NOT_SUPPORTED"/>
+            <tx:method name="load*" read-only="true" propagation="NOT_SUPPORTED"/>
+            <tx:method name="find*" read-only="true" propagation="NOT_SUPPORTED"/>
+            <tx:method name="count*" read-only="true" propagation="NOT_SUPPORTED"/>
+            <!-- 其余使用默认事务 -->
+            <tx:method name="*" rollback-for="Exception"/>
+        </tx:attributes>
+    </tx:advice>
+
+    <bean id="log-filter" class="com.alibaba.druid.filter.logging.Slf4jLogFilter">
+        <!-- 所有连接相关的日志 -->
+        <property name="connectionLogEnabled" value="false"/>
+        <!-- 所有Statement相关的日志 -->
+        <property name="statementLogEnabled" value="false"/>
+        <!-- 是否显示结果集 -->
+        <property name="resultSetLogEnabled" value="false"/>
+        <!-- 是否显示SQL语句 -->
+        <property name="statementExecutableSqlLogEnable" value="true"/>
+    </bean>
+</beans>
