@@ -13,6 +13,7 @@
     <!--不需要拦截的url    加入如下配置即可跳过权限检验-->
     <!--<http pattern="/aliOfflineDetailInfo/save" security="none"/>-->
 
+	
 
     <!--所有图片资源-->
     <http pattern="/index.html" security="none"/>
